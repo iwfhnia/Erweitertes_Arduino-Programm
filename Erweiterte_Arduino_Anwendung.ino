@@ -1,80 +1,87 @@
 void setup() {
-  Serial.begin(9600);           // Starte serielle Kommunikation mit 9600 Baud
-  while (!Serial);              // Warte, bis die serielle Schnittstelle bereit ist
+  Serial.begin(9600);
+  while (!Serial);
 }
 
-bool parseOperand(const String& str, int& val) {  //Hilfsfunktion zur Umwandlung und Prüfung des Strings:
-  val = str.toInt();            // Wandle String in int um (Wert ´0´ bei Fehler)
-  return val >= 0 && val <= 1000; // Prüfe, ob val im Bereich 0–1000 liegt
+// Unterstützung für Konstanten und Fließkommazahlen
+float parseOperand(const String& str, bool& ok) {
+  ok = true;
+  if (str == "pi") return 3.14159;        // Einführung mathematischer Konstanten    
+  if (str == "e") return 2.71828;
+  if (str == "mu") return 1.25664e-6;
+  if (str == "eps") return 8.85419e-12;
+
+  float val = str.toFloat();            
+  if (val < 0 || val > 1000) {
+    ok = false;
+  }
+  return val;
 }
 
 void loop() {
-  if (!Serial.available())      // Prüft, ob neue Daten eingetroffen sind. Wenn nicht...
-    return;                     //...wird die loop()-Funktion beendet und startet von vorn
+  if (!Serial.available()) return;
 
-  String input = Serial.readStringUntil('\n'); // Lese Eingabe bis Zeilenumbruch
-  input.trim();                 // Entferne Leerzeichen aus dem Eingabe-String
+  String input = Serial.readStringUntil('\n');
+  input.trim();
 
-  int index = -1;               // Position des Operators (-1: anfangs nicht gefunden)
-  char op = 0;                  // Gefundener Operator (0: anfangs kein Zeichen)
-
-  for (char c : "+-*/") {       // Suche nach erstem Operator in Eingabe
-    index = input.indexOf(c);   //Suche nach Operator:
-    if (index != -1) {          // Operator gefunden
-      op = c;                   // Speichere Operator
-      break;                    // Beenden der Operatorsuche
+  int index = -1;
+  char op = 0;
+  for (char c : "+-*/") {
+    index = input.indexOf(c);
+    if (index != -1) {
+      op = c;
+      break;
     }
   }
 
-  if (index == -1) {            // Kein Operator gefunden?
-    Serial.println("Fehler: Kein gültiger Operator"); // Fehlermeldung ausgeben
-    return;                     // loop neu starten
+  if (index == -1) {
+    Serial.println("Kein gültiger Operator (+, -, *, /)");
+    return;
   }
 
-  String teil1 = input.substring(0, index);    // extrahieren des ersten Operanden 
-  String teil2 = input.substring(index + 1);   // extrahieren des zweiten Operanden
-  teil1.trim();                                // Leerzeichen entfernen
-  teil2.trim();                                // Leerzeichen entfernen
+  String teil1 = input.substring(0, index);
+  String teil2 = input.substring(index + 1);
+  teil1.trim();
+  teil2.trim();
 
-  if (teil1.length() == 0 || teil2.length() == 0) { // Prüfung auf vollständige Operanden
-    Serial.println("Fehler: Operanden fehlen");     // Fehlermeldung bei fehlendem Operanden
-    return;                                         // loop neu starten
+  if (teil1.length() == 0 || teil2.length() == 0) {
+    Serial.println("Einer oder beide Operanden fehlen");
+    return;
+  }
+  
+  bool ok1, ok2;                        
+  float zahl1 = parseOperand(teil1, ok1); // parseOperand liefert float
+  float zahl2 = parseOperand(teil2, ok2);
+
+  if (!ok1 || !ok2) {
+    Serial.println("Operanden müssen zwischen 0 und 1000 liegen oder gültige Konstanten (pi, e, mu, eps) sein");
+    return;
   }
 
-  int zahl1, zahl2;             // Variablen für Operanden als int
-  if (!parseOperand(teil1, zahl1) || !parseOperand(teil2, zahl2)) { // Umwandlung von ´teil1,2´ in ´Zahl1,2´ und Prüfung des Wertebereichs
-    Serial.println("Fehler: Operanden müssen zwischen 0 und 1000 liegen"); // Fehlermeldung, wenn Operanden außerhalb des gültigen Wertebereichs liegen
-    return;                     //loop neu starten
-  }
+  float ergebnis = 0;
+  bool fehler = false;
 
-  float ergebnis = 0;           // Ergebnisvariable (float für Division)
-  bool fehler = false;          // Flag für Kennzeichnung/ Feststellung von Fehlern
-
-  switch (op) {                 // Auswahl der Rechenoperation:
-    case '+':
-      ergebnis = zahl1 + zahl2; // Addition
-      break;
-    case '-':
-      ergebnis = zahl1 - zahl2; // Subtraktion
-      break;
-    case '*':
-      ergebnis = zahl1 * zahl2; // Multiplikation
-      break;
+  switch (op) {
+    case '+': ergebnis = zahl1 + zahl2; break;
+    case '-': ergebnis = zahl1 - zahl2; break;
+    case '*': ergebnis = zahl1 * zahl2; break;
     case '/':
-      if (zahl2 == 0) {         // Prüfung auf Nullteilung
-        Serial.println("Fehler: Division durch 0"); // Fehlerausgabe bei Nullteilung
-        fehler = true;          // Flag auf true: Fehler aufgetreten
-      } else {                  // liegt keine Nullteilung vor:
-        ergebnis = (float)zahl1 / zahl2; // Division ausführen
+      if (zahl2 == 0) {
+        Serial.println("Division durch 0 ist nicht erlaubt");
+        fehler = true;
+      } else {
+        ergebnis = zahl1 / zahl2;
       }
       break;
-    default:                    // liegt kein gültiger Operator vor:
-      Serial.println("Fehler: Unbekannter Operator"); // Fehlerausgabe
-      fehler = true;          // Flag auf true: Fehler aufgetreten
+    default:
+      Serial.println("Unbekannter Rechenoperator");
+      fehler = true;
       break;
   }
 
-  if (!fehler) {                // Ist kein Fehler aufgetreten:
-    Serial.println(input + "=" + ergebnis); // Ausgabe der Eingabezeile (input) und des zugehörigen berechneten Ergebnisses
+  if (!fehler) {
+    Serial.print(input + "=");
+    Serial.println(ergebnis, 5);     // Mehr Nachkommastellen bei Ausgabe
+
   }
 }
